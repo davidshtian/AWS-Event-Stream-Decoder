@@ -1,0 +1,897 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AWS Event Stream Decoding</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        
+        .container {
+            background: white;
+            border-radius: 8px;
+            padding: 30px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        h1 {
+            color: #232f3e;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .input-section {
+            margin-bottom: 30px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 10px;
+            font-weight: bold;
+            color: #333;
+        }
+        
+        textarea {
+            width: 100%;
+            height: 150px;
+            padding: 15px;
+            border: 2px solid #ddd;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            font-size: 14px;
+            resize: vertical;
+            box-sizing: border-box;
+        }
+        
+        textarea:focus {
+            border-color: #ff9900;
+            outline: none;
+        }
+        
+        .button-group {
+            text-align: center;
+            margin: 20px 0;
+        }
+        
+        button {
+            background-color: #ff9900;
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            font-size: 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 0 10px;
+            transition: background-color 0.3s;
+        }
+        
+        button:hover {
+            background-color: #e88900;
+        }
+        
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .results {
+            margin-top: 30px;
+        }
+        
+        .message-block {
+            border: 2px solid #232f3e;
+            border-radius: 8px;
+            margin-bottom: 20px;
+            overflow: hidden;
+        }
+        
+        .message-header {
+            background-color: #232f3e;
+            color: white;
+            padding: 15px;
+            font-weight: bold;
+            font-size: 16px;
+        }
+        
+        .message-content {
+            padding: 20px;
+            background-color: #fafafa;
+        }
+        
+        .section {
+            margin-bottom: 20px;
+            padding: 15px;
+            background-color: white;
+            border-radius: 5px;
+            border-left: 4px solid #ff9900;
+        }
+        
+        .section-title {
+            font-weight: bold;
+            color: #232f3e;
+            margin-bottom: 10px;
+            font-size: 14px;
+            text-transform: uppercase;
+        }
+        
+        .hex-display {
+            font-family: 'Courier New', monospace;
+            background-color: #f0f0f0;
+            padding: 10px;
+            border-radius: 3px;
+            word-break: break-all;
+            font-size: 12px;
+            color: #666;
+        }
+        
+        .json-display {
+            font-family: 'Courier New', monospace;
+            background-color: #f8f8f8;
+            padding: 15px;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+            white-space: pre-wrap;
+            font-size: 13px;
+        }
+        
+        .header-item {
+            background-color: #f9f9f9;
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 3px;
+            border-left: 3px solid #ff9900;
+        }
+        
+        .error {
+            background-color: #ffebee;
+            color: #c62828;
+            padding: 15px;
+            border-radius: 5px;
+            border-left: 4px solid #c62828;
+            margin: 10px 0;
+        }
+        
+        .warning {
+            background-color: #fff3e0;
+            color: #ef6c00;
+            padding: 15px;
+            border-radius: 5px;
+            border-left: 4px solid #ef6c00;
+            margin: 10px 0;
+        }
+        
+        .stats {
+            display: flex;
+            justify-content: space-around;
+            background-color: #e8f5e8;
+            padding: 15px;
+            border-radius: 5px;
+            margin-bottom: 20px;
+        }
+        
+        .stat-item {
+            text-align: center;
+        }
+        
+        .stat-number {
+            font-size: 24px;
+            font-weight: bold;
+            color: #2e7d32;
+        }
+        
+        .stat-label {
+            font-size: 12px;
+            color: #666;
+            text-transform: uppercase;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔍 AWS Event Stream Decoding</h1>
+        
+        <div style="text-align: center; margin-bottom: 20px;">
+            <p style="color: #666; font-size: 14px;">
+                Binary message parsing tool based on <a href="https://github.com/awslabs/aws-c-event-stream/?tab=readme-ov-file#encoding" target="_blank" style="color: #ff9900; text-decoration: none;">AWS Event Stream Protocol</a>
+            </p>
+        </div>
+        
+        <div class="input-section">
+            <label for="input">Input AWS Event Stream binary data (supports multiple formats):</label>
+            <textarea id="input" placeholder="Supports the following formats:
+1. Python bytes format: b'\x00\x00\x00\x95\x00\x00\x00R...'
+2. Hexadecimal string: 000000950000005f9a147d1...
+3. Spaced hexadecimal: 00 00 00 95 00 00 00 5f 9a 14 7d 1...
+
+You can input multiple message segments, the tool will automatically identify and parse all complete messages.
+
+Smart header byte length handling:
+- Automatically detects if headers already include byte length prefix
+- If not, automatically adds corresponding byte length:
+  · :message-type (13 bytes) → \x0d
+  · :content-type (13 bytes) → \x0d  
+  · :event-type (11 bytes) → \x0b
+  · :error-code (11 bytes) → \x0b
+  · :error-message (14 bytes) → \x0e
+- If byte length prefix already exists, keeps it as is
+
+Supports mixed input:
+b':content-type\x07\x00\x10application/json'     ← Auto-adds \x0d
+b'\x0d:message-type\x07\x00\x05event...'        ← Has prefix, keeps as is
+
+Applicable to event stream data from AWS S3 Select, Kinesis Analytics, EventBridge and other services."></textarea>
+        </div>
+        
+        <div class="button-group">
+            <button onclick="parseMessages()">🔍 Parse Messages</button>
+            <button onclick="clearAll()">🗑️ Clear</button>
+        </div>
+        
+        <div id="results" class="results"></div>
+    </div>
+
+    <script>
+        function parseMessages() {
+            const input = document.getElementById('input').value.trim();
+            const resultsDiv = document.getElementById('results');
+            
+            if (!input) {
+                resultsDiv.innerHTML = '<div class="error">Please enter data to parse</div>';
+                return;
+            }
+            
+            try {
+                const binaryData = parseInput(input);
+                const messages = parseS3SelectMessages(binaryData);
+                displayResults(messages, binaryData);
+            } catch (error) {
+                resultsDiv.innerHTML = `<div class="error">Parse error: ${error.message}</div>`;
+            }
+        }
+        
+        function parseInput(input) {
+            // Check if contains Python bytes format
+            if (input.includes("b'") || input.includes('b"')) {
+                return parsePythonBytes(input);
+            }
+            
+            // Remove all whitespace and newlines, handle pure hexadecimal
+            let cleanInput = input.replace(/\s+/g, '');
+            
+            // Handle pure hexadecimal string
+            if (/^[0-9a-fA-F]+$/.test(cleanInput)) {
+                return hexStringToBytes(cleanInput);
+            }
+            
+            throw new Error('Unsupported input format. Please use Python bytes format or hexadecimal string.');
+        }
+        
+        function parsePythonBytes(input) {
+            const bytes = [];
+            
+            // Define valid header names and their byte lengths
+            const validHeaders = {
+                ':message-type': 13,
+                ':event-type': 11,
+                ':error-code': 11,
+                ':error-message': 14,
+                ':content-type': 13
+            };
+            
+            // Process input, extract all b'...' strings, intelligently handle header name byte lengths
+            let currentPos = 0;
+            const regex = /b'((?:[^'\\]|\\.)*)'/g;
+            let match;
+            let isFirstMatch = true;
+            
+            while ((match = regex.exec(input)) !== null) {
+                // If not the first match, need to check if header name byte length needs to be added
+                if (!isFirstMatch) {
+                    // Parse current match's byte string
+                    const byteString = match[1];
+                    const segmentBytes = pythonBytesToArray(byteString);
+                    
+                    // Check if already contains byte length prefix
+                    let alreadyHasLength = false;
+                    let headerFound = false;
+                    let headerLength = 13; // Default length
+                    
+                    // Try to find header name and check if it already has length prefix
+                    for (const [headerName, expectedLength] of Object.entries(validHeaders)) {
+                        const headerBytes = new TextEncoder().encode(headerName);
+                        
+                        // Case 1: Check if starts with byte length + header name
+                        if (segmentBytes.length >= expectedLength + 1 && 
+                            segmentBytes[0] === expectedLength) {
+                            let matches = true;
+                            for (let i = 0; i < headerBytes.length; i++) {
+                                if (segmentBytes[i + 1] !== headerBytes[i]) {
+                                    matches = false;
+                                    break;
+                                }
+                            }
+                            if (matches) {
+                                alreadyHasLength = true;
+                                headerFound = true;
+                                headerLength = expectedLength;
+                                console.log(`Detected header with byte length: ${headerName} (length: ${expectedLength})`);
+                                break;
+                            }
+                        }
+                        
+                        // Case 2: Check if starts directly with header name (no length prefix)
+                        if (!alreadyHasLength && segmentBytes.length >= headerBytes.length) {
+                            let matches = true;
+                            for (let i = 0; i < headerBytes.length; i++) {
+                                if (segmentBytes[i] !== headerBytes[i]) {
+                                    matches = false;
+                                    break;
+                                }
+                            }
+                            if (matches) {
+                                headerFound = true;
+                                headerLength = expectedLength;
+                                console.log(`Detected header needing byte length: ${headerName} (length: ${expectedLength})`);
+                                break;
+                            }
+                        }
+                    }
+                    
+                    // If no matching header found, check if first byte might be a length value
+                    if (!headerFound && segmentBytes.length > 0) {
+                        const firstByte = segmentBytes[0];
+                        if (firstByte >= 10 && firstByte <= 20) { // Reasonable header length range
+                            alreadyHasLength = true;
+                            console.log(`Detected possible byte length prefix: ${firstByte}`);
+                        }
+                    }
+                    
+                    // Only add if no length prefix exists
+                    if (!alreadyHasLength) {
+                        bytes.push(headerLength);
+                        console.log(`Adding header byte length: ${headerLength}`);
+                    } else {
+                        console.log(`Skipping byte length addition (already exists)`);
+                    }
+                }
+                
+                // Add matched byte string content
+                const byteString = match[1];
+                const segmentBytes = pythonBytesToArray(byteString);
+                bytes.push(...segmentBytes);
+                
+                currentPos = match.index + match[0].length;
+                isFirstMatch = false;
+            }
+            
+            console.log(`Parsed ${bytes.length} bytes`);
+            console.log(`First 20 bytes: ${Array.from(bytes.slice(0, 20)).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' ')}`);
+            
+            return new Uint8Array(bytes);
+        }
+        
+        function pythonBytesToArray(byteString) {
+            const bytes = [];
+            let i = 0;
+            
+            while (i < byteString.length) {
+                if (byteString[i] === '\\' && i + 1 < byteString.length) {
+                    const nextChar = byteString[i + 1];
+                    if (nextChar === 'x' && i + 3 < byteString.length) {
+                        // Hexadecimal escape sequence \xNN
+                        const hex = byteString.substr(i + 2, 2);
+                        if (/^[0-9a-fA-F]{2}$/.test(hex)) {
+                            bytes.push(parseInt(hex, 16));
+                            i += 4;
+                        } else {
+                            // Invalid hexadecimal, treat literally
+                            bytes.push(byteString.charCodeAt(i));
+                            i++;
+                        }
+                    } else if (nextChar === '\\') {
+                        // Escaped backslash
+                        bytes.push(92); // ASCII for '\'
+                        i += 2;
+                    } else if (nextChar === '\'') {
+                        // Escaped single quote
+                        bytes.push(39); // ASCII for '\''
+                        i += 2;
+                    } else if (nextChar === '"') {
+                        // Escaped double quote
+                        bytes.push(34); // ASCII for '"'
+                        i += 2;
+                    } else if (nextChar === 'n') {
+                        // Newline
+                        bytes.push(10);
+                        i += 2;
+                    } else if (nextChar === 't') {
+                        // Tab
+                        bytes.push(9);
+                        i += 2;
+                    } else if (nextChar === 'r') {
+                        // Carriage return
+                        bytes.push(13);
+                        i += 2;
+                    } else if (nextChar === '0') {
+                        // Null character
+                        bytes.push(0);
+                        i += 2;
+                    } else {
+                        // Other escape sequences, treat first character literally
+                        bytes.push(byteString.charCodeAt(i));
+                        i++;
+                    }
+                } else {
+                    // Regular character
+                    bytes.push(byteString.charCodeAt(i));
+                    i++;
+                }
+            }
+            
+            return bytes;
+        }
+        
+        function hexStringToBytes(hexString) {
+            const bytes = [];
+            for (let i = 0; i < hexString.length; i += 2) {
+                bytes.push(parseInt(hexString.substr(i, 2), 16));
+            }
+            return new Uint8Array(bytes);
+        }
+        
+        function parseS3SelectMessages(data) {
+            const messages = [];
+            let offset = 0;
+            
+            console.log(`Starting to parse ${data.length} bytes of data`);
+            
+            while (offset < data.length) {
+                console.log(`Attempting to parse message at offset ${offset}`);
+                try {
+                    const message = parseMessage(data, offset);
+                    if (message) {
+                        console.log(`Successfully parsed message, length: ${message.totalLength}`);
+                        messages.push(message);
+                        offset += message.totalLength;
+                    } else {
+                        break;
+                    }
+                } catch (error) {
+                    console.log(`Parse failed: ${error.message}`);
+                    // If parsing fails, record remaining data and stop
+                    const remainingData = data.slice(offset);
+                    messages.push({
+                        type: 'incomplete',
+                        error: error.message,
+                        remainingBytes: remainingData,
+                        offset: offset
+                    });
+                    break;
+                }
+            }
+            
+            console.log(`Total parsed ${messages.length} messages`);
+            return messages;
+        }
+        
+        function parseMessage(data, offset) {
+            if (offset + 12 > data.length) {
+                throw new Error(`Insufficient data to read message header (need 12 bytes, remaining ${data.length - offset} bytes)`);
+            }
+            
+            // Read Prelude (8 bytes)
+            const totalLength = readUint32BE(data, offset);
+            const headerLength = readUint32BE(data, offset + 4);
+            
+            // Validate message length
+            if (offset + totalLength > data.length) {
+                throw new Error(`Incomplete message (declared length ${totalLength} bytes, remaining ${data.length - offset} bytes)`);
+            }
+            
+            // Read Prelude CRC (4 bytes)
+            const preludeCrc = readUint32BE(data, offset + 8);
+            
+            // Verify Prelude CRC
+            const preludeData = data.slice(offset, offset + 8);
+            const calculatedPreludeCrc = calculateCRC32(preludeData);
+            
+            console.log(`Prelude CRC verification:`, {
+                preludeData: Array.from(preludeData).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' '),
+                expectedCrc: '0x' + preludeCrc.toString(16).padStart(8, '0'),
+                calculatedCrc: '0x' + calculatedPreludeCrc.toString(16).padStart(8, '0'),
+                match: preludeCrc === calculatedPreludeCrc
+            });
+            
+            // Parse headers
+            const headersStart = offset + 12; // Prelude (8) + Prelude CRC (4)
+            const headersEnd = headersStart + headerLength;
+            const headers = parseHeaders(data, headersStart, headersEnd);
+            
+            // Parse payload - Key fix: payload is after headers, message CRC is after payload
+            const payloadStart = headersEnd;
+            const payloadEnd = offset + totalLength - 4; // Total length minus last 4 bytes of message CRC
+            const payload = data.slice(payloadStart, payloadEnd);
+            
+            // Read message CRC (last 4 bytes)
+            const messageCrc = readUint32BE(data, payloadEnd);
+            
+            // Verify message CRC (from message start to payload end, excluding message CRC itself)
+            const messageData = data.slice(offset, payloadEnd);
+            const calculatedMessageCrc = calculateCRC32(messageData);
+            
+            console.log(`Message CRC verification:`, {
+                messageDataLength: messageData.length,
+                messageDataStart: Array.from(messageData.slice(0, 16)).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' '),
+                messageDataEnd: Array.from(messageData.slice(-16)).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' '),
+                expectedCrc: '0x' + messageCrc.toString(16).padStart(8, '0'),
+                calculatedCrc: '0x' + calculatedMessageCrc.toString(16).padStart(8, '0'),
+                match: messageCrc === calculatedMessageCrc
+            });
+            
+            console.log(`Message CRC calculation range: ${offset} - ${payloadEnd} (${messageData.length} bytes)`);
+            console.log(`Message CRC data first 16 bytes: ${Array.from(messageData.slice(0, 16)).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' ')}`);
+            console.log(`Message CRC data last 16 bytes: ${Array.from(messageData.slice(-16)).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' ')}`);
+            console.log(`Expected message CRC: 0x${messageCrc.toString(16).padStart(8, '0')}`);
+            console.log(`Calculated message CRC: 0x${calculatedMessageCrc.toString(16).padStart(8, '0')}`);
+            
+            
+            return {
+                type: 'message',
+                totalLength,
+                headerLength,
+                preludeCrc,
+                calculatedPreludeCrc,
+                preludeCrcValid: preludeCrc === calculatedPreludeCrc,
+                headers,
+                payload,
+                payloadLength: payload.length,
+                messageCrc,
+                calculatedMessageCrc,
+                messageCrcValid: messageCrc === calculatedMessageCrc,
+                offset
+            };
+        }
+        
+        function parseHeaders(data, start, end) {
+            const headers = [];
+            let offset = start;
+            
+            console.log(`Starting header parsing, range: ${start} - ${end}`);
+            
+            while (offset < end) {
+                // Ensure enough bytes to read header name length
+                if (offset + 1 > end) {
+                    console.log(`Header parsing ended: offset ${offset} exceeds range ${end}`);
+                    break;
+                }
+                
+                // Read header name length
+                let nameLength = data[offset];
+                offset++;
+                
+                console.log(`Header name length: ${nameLength}, current offset: ${offset}`);
+                
+                if (offset + nameLength > end) {
+                    console.log(`Header name length ${nameLength} exceeds range, offset ${offset}, end ${end}`);
+                    break;
+                }
+                
+                // Read header name - first read according to specified length
+                let nameBytes = data.slice(offset, offset + nameLength);
+                let name = new TextDecoder('utf-8').decode(nameBytes);
+                offset += nameLength;
+                
+                console.log(`Initial header name: "${name}" (${nameLength} bytes), new offset: ${offset}`);
+                console.log(`Name bytes: ${Array.from(nameBytes).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' ')}`);
+                
+                if (offset + 1 > end) {
+                    console.log(`Cannot read value type, offset ${offset}, end ${end}`);
+                    break;
+                }
+                
+                // Read value type - check if it's the expected value
+                let valueType = data[offset];
+                
+                // Special handling: if value type is not 7, but is a printable character, name length might be wrong
+                if (valueType !== 7 && valueType >= 32 && valueType <= 126) {
+                    console.log(`Detected possible name length error, value type: ${valueType} (0x${valueType.toString(16)}) '${String.fromCharCode(valueType)}'`);
+                    
+                    // Try extending name until finding value type 7
+                    let extendedOffset = offset;
+                    while (extendedOffset < end && data[extendedOffset] !== 7) {
+                        extendedOffset++;
+                    }
+                    
+                    if (extendedOffset < end && data[extendedOffset] === 7) {
+                        // Found value type 7, rebuild name
+                        const actualNameLength = nameLength + (extendedOffset - offset);
+                        nameBytes = data.slice(offset - nameLength, extendedOffset);
+                        name = new TextDecoder('utf-8').decode(nameBytes);
+                        offset = extendedOffset;
+                        valueType = data[offset];
+                        
+                        console.log(`Corrected header name: "${name}" (${actualNameLength} bytes), new offset: ${offset}`);
+                        console.log(`Corrected name bytes: ${Array.from(nameBytes).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' ')}`);
+                    }
+                }
+                
+                offset++;
+                
+                console.log(`Value type: ${valueType}, current offset: ${offset}`);
+                
+                if (offset + 2 > end) {
+                    console.log(`Cannot read value length, offset ${offset}, end ${end}`);
+                    break;
+                }
+                
+                // Read value length (2 bytes big-endian)
+                const valueLength = readUint16BE(data, offset);
+                offset += 2;
+                
+                console.log(`Value length: ${valueLength}, current offset: ${offset}`);
+                
+                if (offset + valueLength > end) {
+                    console.log(`Value length ${valueLength} exceeds range, offset ${offset}, end ${end}`);
+                    // Read available data
+                    const availableLength = end - offset;
+                    if (availableLength > 0) {
+                        const partialValueBytes = data.slice(offset, end);
+                        const partialValue = new TextDecoder('utf-8').decode(partialValueBytes);
+                        headers.push({
+                            name,
+                            valueType,
+                            value: partialValue + ' (truncated)',
+                            nameLength: nameBytes.length,
+                            valueLength,
+                            truncated: true
+                        });
+                        console.log(`Parsed truncated header: ${name} = ${partialValue} (truncated), new offset: ${end}`);
+                        console.log(`Truncated value bytes: ${Array.from(partialValueBytes).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' ')}`);
+                    }
+                    break;
+                }
+                
+                // Read value
+                const valueBytes = data.slice(offset, offset + valueLength);
+                const value = new TextDecoder('utf-8').decode(valueBytes);
+                offset += valueLength;
+                
+                headers.push({
+                    name,
+                    valueType,
+                    value,
+                    nameLength: nameBytes.length,
+                    valueLength
+                });
+                
+                console.log(`Parsed header: ${name} = ${value}, new offset: ${offset}`);
+                console.log(`Value bytes: ${Array.from(valueBytes).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' ')}`);
+            }
+            
+            console.log(`Total parsed ${headers.length} headers`);
+            return headers;
+        }
+        
+        function readUint32BE(data, offset) {
+            // Ensure we get an unsigned 32-bit integer
+            return ((data[offset] << 24) | (data[offset + 1] << 16) | (data[offset + 2] << 8) | data[offset + 3]) >>> 0;
+        }
+        
+        function readUint16BE(data, offset) {
+            return (data[offset] << 8) | data[offset + 1];
+        }
+        
+        function calculateCRC32(data) {
+            // Standard CRC32 algorithm (IEEE 802.3, also known as GZIP CRC32)
+            // This is the CRC32 algorithm used by AWS Event Stream
+            
+            // CRC32 lookup table - use static table for performance
+            if (!calculateCRC32.crcTable) {
+                calculateCRC32.crcTable = [];
+                for (let i = 0; i < 256; i++) {
+                    let crc = i;
+                    for (let j = 0; j < 8; j++) {
+                        if (crc & 1) {
+                            crc = (crc >>> 1) ^ 0xEDB88320;
+                        } else {
+                            crc = crc >>> 1;
+                        }
+                    }
+                    calculateCRC32.crcTable[i] = crc;
+                }
+            }
+            
+            const crcTable = calculateCRC32.crcTable;
+            
+            // Calculate CRC32
+            let crc = 0xFFFFFFFF;
+            for (let i = 0; i < data.length; i++) {
+                const byte = data[i];
+                crc = crcTable[(crc ^ byte) & 0xFF] ^ (crc >>> 8);
+            }
+            
+            // Return final CRC32 value (ensure it's unsigned 32-bit integer)
+            const result = (crc ^ 0xFFFFFFFF) >>> 0;
+            
+            // Debug information
+            console.log(`CRC32 calculation:`, {
+                dataLength: data.length,
+                dataHex: Array.from(data.slice(0, Math.min(16, data.length))).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' '),
+                result: '0x' + result.toString(16).padStart(8, '0'),
+                resultDecimal: result
+            });
+            
+            return result;
+        }
+        
+        function displayResults(messages, originalData) {
+            const resultsDiv = document.getElementById('results');
+            
+            if (messages.length === 0) {
+                resultsDiv.innerHTML = '<div class="error">No valid messages found</div>';
+                return;
+            }
+            
+            let html = '';
+            
+            // Statistics
+            const validMessages = messages.filter(m => m.type === 'message');
+            const incompleteMessages = messages.filter(m => m.type === 'incomplete');
+            
+            html += `
+                <div class="stats">
+                    <div class="stat-item">
+                        <div class="stat-number">${validMessages.length}</div>
+                        <div class="stat-label">Complete Messages</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-number">${incompleteMessages.length}</div>
+                        <div class="stat-label">Incomplete Messages</div>
+                    </div>
+                    <div class="stat-item">
+                        <div class="stat-number">${originalData.length}</div>
+                        <div class="stat-label">Total Bytes</div>
+                    </div>
+                </div>
+            `;
+            
+            // Display each message
+            messages.forEach((message, index) => {
+                if (message.type === 'message') {
+                    html += formatMessage(message, index + 1);
+                } else if (message.type === 'incomplete') {
+                    html += formatIncompleteMessage(message, index + 1);
+                }
+            });
+            
+            resultsDiv.innerHTML = html;
+        }
+        
+        function formatMessage(message, index) {
+            const eventType = message.headers.find(h => h.name === ':event-type')?.value || 'Unknown';
+            const messageType = message.headers.find(h => h.name === ':message-type')?.value || 'Unknown';
+            
+            let payloadDisplay = '';
+            try {
+                const payloadText = new TextDecoder('utf-8').decode(message.payload);
+                if (payloadText.trim().startsWith('{')) {
+                    payloadDisplay = `<div class="json-display">${JSON.stringify(JSON.parse(payloadText), null, 2)}</div>`;
+                } else {
+                    payloadDisplay = `<div class="json-display">${payloadText}</div>`;
+                }
+            } catch (e) {
+                payloadDisplay = `<div class="hex-display">${Array.from(message.payload).map(b => b.toString(16).padStart(2, '0')).join(' ')}</div>`;
+            }
+            
+            return `
+                <div class="message-block">
+                    <div class="message-header">
+                        Message #${index} - ${eventType} (${messageType})
+                    </div>
+                    <div class="message-content">
+                        <div class="section">
+                            <div class="section-title">Prelude Information</div>
+                            <div><strong>Total Length:</strong> ${message.totalLength} bytes</div>
+                            <div><strong>Header Length:</strong> ${message.headerLength} bytes</div>
+                            <div><strong>Payload Length:</strong> ${message.payloadLength} bytes</div>
+                            <div><strong>Offset Position:</strong> ${message.offset} bytes</div>
+                            <div><strong>Prelude CRC:</strong> 0x${message.preludeCrc.toString(16).padStart(8, '0')} 
+                                ${message.preludeCrcValid ? '✅' : '❌ (calculated: 0x' + message.calculatedPreludeCrc.toString(16).padStart(8, '0') + ')'}</div>
+                            <div><strong>Message CRC:</strong> 0x${message.messageCrc.toString(16).padStart(8, '0')} 
+                                ${message.messageCrcValid ? '✅' : '❌ (calculated: 0x' + message.calculatedMessageCrc.toString(16).padStart(8, '0') + ')'}</div>
+                        </div>
+                        
+                        <div class="section">
+                            <div class="section-title">Header Information (${message.headers.length} items)</div>
+                            ${message.headers.map(header => `
+                                <div class="header-item">
+                                    <strong>${header.name}:</strong> ${header.value}
+                                    <small style="color: #666;"> (type: ${header.valueType}, name length: ${header.nameLength}, value length: ${header.valueLength})</small>
+                                </div>
+                            `).join('')}
+                        </div>
+                        
+                        <div class="section">
+                            <div class="section-title">Payload Content</div>
+                            ${payloadDisplay}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+        
+        function formatIncompleteMessage(message, index) {
+            return `
+                <div class="message-block">
+                    <div class="message-header" style="background-color: #ef6c00;">
+                        Incomplete Message #${index} - Parse Interrupted
+                    </div>
+                    <div class="message-content">
+                        <div class="warning">
+                            <strong>Error:</strong> ${message.error}
+                        </div>
+                        <div class="section">
+                            <div class="section-title">Remaining Data</div>
+                            <div><strong>Offset Position:</strong> ${message.offset} bytes</div>
+                            <div><strong>Remaining Bytes:</strong> ${message.remainingBytes.length} bytes</div>
+                            <div class="hex-display">
+                                ${Array.from(message.remainingBytes).map(b => b.toString(16).padStart(2, '0')).join(' ')}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+        
+        function clearAll() {
+            document.getElementById('input').value = '';
+            document.getElementById('results').innerHTML = '';
+        }
+        
+        // Add example data when page loads
+        window.onload = function() {
+            // Test if CRC32 calculation is correct
+            testCRC32();
+            
+            const exampleData = `b'\\x00\\x00\\x00\\x95\\x00\\x00\\x00R\\xf9\\xa1G\\xd1\\x0b:event-type\\x07\\x00\\x0cmessageStart'
+b':content-type\\x07\\x00\\x10application/json'
+b':message-type\\x07\\x00\\x05event{"p":"abcdefghijklmnopqrstuvwx","role":"assistant"}\\xfb\\xd5\\xa5\\xb0'`;
+            
+            document.getElementById('input').placeholder += '\n\nExample data has been pre-filled, now automatically adds byte length for header names instead of newline characters.';
+        };
+        
+        function testCRC32() {
+            // Test the provided example: CRC32 of b'\x00\x00\x00\x95\x00\x00\x00R' should be b'\xf9\xa1G\xd1'
+            const testData = new Uint8Array([0x00, 0x00, 0x00, 0x95, 0x00, 0x00, 0x00, 0x52]);
+            const expectedCrc = 0xf9a147d1; // big-endian interpretation of b'\xf9\xa1G\xd1'
+            const calculatedCrc = calculateCRC32(testData);
+            
+            console.log('CRC32 test result:', {
+                testData: Array.from(testData).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' '),
+                expectedCrc: '0x' + expectedCrc.toString(16).padStart(8, '0'),
+                calculatedCrc: '0x' + calculatedCrc.toString(16).padStart(8, '0'),
+                match: expectedCrc === calculatedCrc,
+                expectedBytes: [0xf9, 0xa1, 0x47, 0xd1],
+                calculatedBytes: [
+                    (calculatedCrc >>> 24) & 0xFF,
+                    (calculatedCrc >>> 16) & 0xFF,
+                    (calculatedCrc >>> 8) & 0xFF,
+                    calculatedCrc & 0xFF
+                ]
+            });
+            
+            if (expectedCrc === calculatedCrc) {
+                console.log('✅ CRC32 calculation is correct!');
+            } else {
+                console.log('❌ CRC32 calculation mismatch!');
+            }
+        }
+    </script>
+</body>
+</html>
